@@ -133,6 +133,89 @@
             border-radius: 4px;
         }
 
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            .controls-wrapper {
+                top: auto;
+                bottom: 110px;
+                right: 10px;
+                gap: 6px;
+            }
+            
+            .control-btn {
+                padding: 8px 12px;
+                font-size: 8px;
+                letter-spacing: 1px;
+                min-width: 100px;
+            }
+            
+            .subtitle {
+                font-size: 11px;
+                letter-spacing: 3px;
+            }
+            
+            #mode-bar {
+                gap: 12px;
+                bottom: 25px;
+            }
+            
+            .mode-btn {
+                width: 50px;
+                height: 50px;
+            }
+            
+            .mode-btn svg {
+                width: 22px;
+                height: 22px;
+            }
+            
+            #status-display {
+                bottom: 15px;
+                left: 10px;
+                font-size: 8px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .controls-wrapper {
+                bottom: 100px;
+                right: 8px;
+                gap: 5px;
+            }
+            
+            .control-btn {
+                padding: 6px 10px;
+                font-size: 7px;
+                min-width: 85px;
+                letter-spacing: 0.5px;
+            }
+            
+            h1 {
+                font-size: clamp(28px, 7vw, 48px);
+            }
+            
+            .subtitle {
+                font-size: 9px;
+                letter-spacing: 2px;
+                padding: 0 10px;
+            }
+            
+            #mode-bar {
+                gap: 10px;
+                bottom: 20px;
+            }
+            
+            .mode-btn {
+                width: 44px;
+                height: 44px;
+            }
+            
+            .mode-btn svg {
+                width: 20px;
+                height: 20px;
+            }
+        }
+
         .control-btn::before {
             content: '';
             position: absolute;
@@ -252,6 +335,8 @@
             font-size: 12px;
             letter-spacing: 2px;
             border-radius: 8px;
+            max-width: 90%;
+            line-height: 1.6;
         }
 
         .hidden { display: none !important; }
@@ -1135,15 +1220,26 @@
             });
         }
 
-        function showMsg(txt) {
+        function showMsg(txt, duration = 4000) {
             const box = document.getElementById('msg-box');
-            box.innerText = txt;
+            box.innerHTML = txt;
             box.style.display = 'block';
-            setTimeout(() => box.style.display = 'none', 3000);
+            setTimeout(() => box.style.display = 'none', duration);
         }
 
         async function initMediaPipe() {
             if (isCameraRunning) { stopCamera(); return; }
+            
+            // 检查是否为HTTPS或localhost
+            const isSecure = window.location.protocol === 'https:' || 
+                            window.location.hostname === 'localhost' || 
+                            window.location.hostname === '127.0.0.1';
+            
+            if (!isSecure) {
+                showMsg("⚠️ 手势控制需要 HTTPS 连接<br><br>请使用 https:// 访问此页面<br>或在本地服务器上运行", 6000);
+                return;
+            }
+            
             camBtn.innerText = "Initializing...";
 
             video = document.getElementById('webcam');
@@ -1164,9 +1260,14 @@
                 isCameraRunning = true;
             } catch (e) {
                 let msg = "Camera Error";
-                if (e.name === 'NotAllowedError') msg = "Camera access denied";
-                else if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') msg = "HTTPS required";
-                showMsg(msg);
+                if (e.name === 'NotAllowedError') {
+                    msg = "⚠️ 摄像头权限被拒绝<br><br>请在浏览器设置中允许摄像头访问";
+                } else if (e.name === 'NotFoundError') {
+                    msg = "⚠️ 未检测到摄像头";
+                } else if (e.name === 'NotReadableError') {
+                    msg = "⚠️ 摄像头被其他应用占用";
+                }
+                showMsg(msg, 5000);
                 camBtn.innerText = "◈ Enable Gesture";
             }
         }
