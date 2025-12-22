@@ -1114,46 +1114,70 @@
         function addPhotoToScene(texture) {
             const group = new THREE.Group();
 
-            let imgWidth = 1.3, imgHeight = 1.3;
-            if (texture.image) {
-                const aspect = texture.image.width / texture.image.height;
-                if (aspect > 1) imgHeight = imgWidth / aspect;
-                else imgWidth = imgHeight * aspect;
-            }
+            // 边框图片的宽高比 (328x516)
+            const frameAspect = 328 / 516;
+            const frameHeight = 2.2;  // 边框整体高度
+            const frameWidth = frameHeight * frameAspect;
 
-            // Polaroid dimensions
-            const frameWidth = imgWidth + 0.4;
-            const frameHeight = imgHeight + 0.7;
-            const frameDepth = 0.06;
-            const borderBottom = 0.55;
-            const borderTop = 0.15;
+            // 白色区域相对于整个边框的比例（根据你的边框图估算）
+            // 左右边框约占 9%，上边框约占 5%，下边框（含玉桂狗）约占 18%
+            const innerWidthRatio = 0.82;   // 白色区域宽度占比
+            const innerHeightRatio = 0.77;  // 白色区域高度占比
+            const innerOffsetY = 0.07;      // 白色区域中心相对于边框中心的偏移（向上）
 
-            // FRAME: Pure White Basic Material. Since Threshold is 0.5, this (1.0) will glow.
-            const frameMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-            const frame = new THREE.Mesh(new THREE.BoxGeometry(frameWidth, frameHeight, frameDepth), frameMat);
+            const innerWidth = frameWidth * innerWidthRatio;
+            const innerHeight = frameHeight * innerHeightRatio;
+
+            // 加载边框纹理
+            const frameLoader = new THREE.TextureLoader();
+            const frameTexture = frameLoader.load('./cinnamoroll-frame.png');
+            frameTexture.colorSpace = THREE.SRGBColorSpace;
+
+            // 边框（放在后面作为背景）
+            const frameMat = new THREE.MeshBasicMaterial({ 
+                map: frameTexture,
+                side: THREE.DoubleSide
+            });
+            const frame = new THREE.Mesh(
+                new THREE.PlaneGeometry(frameWidth, frameHeight), 
+                frameMat
+            );
+            frame.position.z = -0.01;  // 边框在后
             group.add(frame);
 
-            // PHOTO: Basic Material with slight dimming (0xdddddd).
-            // This ensures pixel values stay just below the blowout point of the bloom, 
-            // keeping the image crisp while the frame around it glows.
+            // 计算照片尺寸（适配白色区域，保持照片原始比例）
+            let imgWidth = innerWidth;
+            let imgHeight = innerHeight;
+            if (texture.image) {
+                const imgAspect = texture.image.width / texture.image.height;
+                const innerAspect = innerWidth / innerHeight;
+                if (imgAspect > innerAspect) {
+                    // 照片更宽，以宽度为准
+                    imgHeight = innerWidth / imgAspect;
+                } else {
+                    // 照片更高，以高度为准
+                    imgWidth = innerHeight * imgAspect;
+                }
+            }
+
+            // 照片（放在前面，位于白色区域）
             const photoMat = new THREE.MeshBasicMaterial({ 
                 map: texture, 
-                side: THREE.FrontSide,
-                color: 0xdddddd 
+                side: THREE.FrontSide
             });
             const photo = new THREE.Mesh(new THREE.PlaneGeometry(imgWidth, imgHeight), photoMat);
-            photo.position.z = frameDepth / 2 + 0.002;
-            photo.position.y = (borderBottom - borderTop) / 2;
+            photo.position.z = 0.01;  // 照片在前
+            photo.position.y = frameHeight * innerOffsetY;  // 向上偏移到白色区域中心
             group.add(photo);
 
-            // Back
-            const backMat = new THREE.MeshBasicMaterial({ color: 0xeeeeee });
+            // 背面（浅蓝色配合主题）
+            const backMat = new THREE.MeshBasicMaterial({ color: 0xaee1f9 });
             const back = new THREE.Mesh(new THREE.PlaneGeometry(frameWidth, frameHeight), backMat);
-            back.position.z = -frameDepth / 2 - 0.002;
+            back.position.z = -0.02;
             back.rotation.y = Math.PI;
             group.add(back);
 
-            group.scale.setScalar(0.8);
+            group.scale.setScalar(1.0);  // 可以调整整体大小
             photoMeshGroup.add(group);
             
             particleSystem.push(new Particle(group, 'PHOTO'));
