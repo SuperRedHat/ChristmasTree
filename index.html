@@ -706,43 +706,56 @@
                 STATE.userInteracted = true;
                 autoplayOverlay.classList.remove('show');
 
-                // 1. 设置音量为 0 (静音)
-                bgMusic.volume = 0;
-                // 2. 立刻开始播放 (且不要暂停！)
-                // 浏览器认为音频正在播放，只是用户听不到
-                bgMusic.play().catch(e => console.log("Background playback failed", e));
-                // === 修改重点结束 ===
+                // === 修正方案：最原始的解锁方式 ===
+                // 1. 设置正常音量 (防止部分手机因为音量0而自动挂起音频)
+                bgMusic.volume = 0.5; 
+                bgMusic.muted = false;
 
-                // 播放开场动画
+                // 2. 强行播放，并在成功后立刻暂停
+                // 这是一个同步动作，浏览器能识别
+                try {
+                    await bgMusic.play();
+                    bgMusic.pause();       // 拿到权限后立刻暂停
+                    bgMusic.currentTime = 0; // 倒带回开头
+                } catch (e) {
+                    console.log("Audio unlock failed, waiting for manual interaction", e);
+                }
+
+                // 3. 播放开场视频
                 await introManager.play();
 
-                // 开场结束后播放背景音乐
+                // 4. 视频结束后播放音乐
                 startMusic();
             };
 
+            // 只监听 click，它是最稳的
             autoplayOverlay.addEventListener('click', startExperience);
-            document.addEventListener('touchstart', startExperience, { once: true });
-            document.addEventListener('keydown', startExperience, { once: true });
         }
 
         function startMusic() {
-            // 1. 关键步骤：把音乐进度条“倒带”回起点
-            // 浏览器允许在播放过程中随意修改进度，这不会中断播放权限
-            bgMusic.currentTime = 0; 
+            // 确保静音关闭
+            bgMusic.muted = false;
+            bgMusic.volume = 0.5;
+            bgMusic.currentTime = 0; // 确保从头开始
             
-            // 2. 此时音乐还在继续播放（静音状态），我们用 GSAP 把音量慢慢拉起来
-            gsap.to(bgMusic, {
-                volume: 1,  // 目标音量
-                duration: 1,  // 3秒淡入，非常自然
-                onStart: () => {
-                    bgMusic.muted = false; // 确保静音关闭
-                }
-            });
-
-            // 3. 更新按钮 UI
-            musicBtn.innerText = "♪ Stop Music";
-            musicBtn.classList.add('active');
-            STATE.musicPlaying = true;
+            // 直接播放，不要加任何花哨的特效
+            const playPromise = bgMusic.play();
+            
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    // 播放成功
+                    musicBtn.innerText = "♪ Stop Music";
+                    musicBtn.classList.add('active');
+                    STATE.musicPlaying = true;
+                }).catch(error => {
+                    console.error("Playback failed:", error);
+                    // 如果自动播放还是失败，重置按钮状态，提示用户手动点击
+                    musicBtn.innerText = "♪ Play Music";
+                    musicBtn.classList.remove('active');
+                    STATE.musicPlaying = false;
+                    showMsg("Tap Music Button to Start Audio");
+                });
+            }
         }
 
         musicBtn.addEventListener('click', () => {
