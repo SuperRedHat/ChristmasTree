@@ -706,6 +706,14 @@
                 STATE.userInteracted = true;
                 autoplayOverlay.classList.remove('show');
 
+                // 先尝试播放一下，然后立刻暂停。
+                // 这会让 iOS/Android 认为该音频已被用户激活，之后再调用 play 就能成功了。
+                bgMusic.muted = true; // 先静音，防止发出短暂的杂音
+                bgMusic.play().then(() => {
+                    bgMusic.pause();      // 立刻暂停
+                    bgMusic.muted = false; // 取消静音，为稍后正式播放做准备
+                }).catch(e => console.log("Audio unlock failed", e));
+                
                 // 播放开场动画
                 await introManager.play();
 
