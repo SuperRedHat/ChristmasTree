@@ -706,14 +706,13 @@
                 STATE.userInteracted = true;
                 autoplayOverlay.classList.remove('show');
 
-                // 先尝试播放一下，然后立刻暂停。
-                // 这会让 iOS/Android 认为该音频已被用户激活，之后再调用 play 就能成功了。
-                bgMusic.muted = true; // 先静音，防止发出短暂的杂音
-                bgMusic.play().then(() => {
-                    bgMusic.pause();      // 立刻暂停
-                    bgMusic.muted = false; // 取消静音，为稍后正式播放做准备
-                }).catch(e => console.log("Audio unlock failed", e));
-                
+                // 1. 设置音量为 0 (静音)
+                bgMusic.volume = 0;
+                // 2. 立刻开始播放 (且不要暂停！)
+                // 浏览器认为音频正在播放，只是用户听不到
+                bgMusic.play().catch(e => console.log("Background playback failed", e));
+                // === 修改重点结束 ===
+
                 // 播放开场动画
                 await introManager.play();
 
@@ -727,12 +726,23 @@
         }
 
         function startMusic() {
-            bgMusic.muted = false;
-            bgMusic.play().then(() => {
-                musicBtn.innerText = "♪ Stop Music";
-                musicBtn.classList.add('active');
-                STATE.musicPlaying = true;
-            }).catch(e => console.log("Music autoplay blocked:", e));
+            // 1. 关键步骤：把音乐进度条“倒带”回起点
+            // 浏览器允许在播放过程中随意修改进度，这不会中断播放权限
+            bgMusic.currentTime = 0; 
+            
+            // 2. 此时音乐还在继续播放（静音状态），我们用 GSAP 把音量慢慢拉起来
+            gsap.to(bgMusic, {
+                volume: 1,  // 目标音量
+                duration: 1,  // 3秒淡入，非常自然
+                onStart: () => {
+                    bgMusic.muted = false; // 确保静音关闭
+                }
+            });
+
+            // 3. 更新按钮 UI
+            musicBtn.innerText = "♪ Stop Music";
+            musicBtn.classList.add('active');
+            STATE.musicPlaying = true;
         }
 
         musicBtn.addEventListener('click', () => {
