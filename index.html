@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -470,7 +470,7 @@
     <div class="corner corner-br"></div>
 
     <div id="intro-layer">
-        <video id="intro-video" playsinline webkit-playsinline>
+        <video id="intro-video" playsinline webkit-playsinline preload="auto">
             <source src="./intro.mp4" type="video/mp4">
         </video>
         <div id="skip-intro">Skip ▶</div>
@@ -697,16 +697,14 @@
 
         // === AUTO-PLAY MUSIC ===
         function setupAutoPlay() {
-            // 注意：这里不再使用 setTimeout 自动显示 overlay
-            // 而是等待视频加载完成后由 init 函数调用显示
-            
+            setTimeout(() => {
+                if (!STATE.userInteracted) autoplayOverlay.classList.add('show');
+            }, 500);
+
             const startExperience = async () => {
                 if (STATE.userInteracted) return;
                 STATE.userInteracted = true;
                 autoplayOverlay.classList.remove('show');
-                
-                // 移除 overlay 防止挡住操作
-                setTimeout(() => autoplayOverlay.style.display = 'none', 500);
 
                 // 播放开场动画
                 await introManager.play();
@@ -716,8 +714,8 @@
             };
 
             autoplayOverlay.addEventListener('click', startExperience);
-            // 移除原本的 touchstart 和 keydown 的一旦触发，防止误触，强制点击图标进入
-            // document.addEventListener('touchstart', startExperience, { once: true });
+            document.addEventListener('touchstart', startExperience, { once: true });
+            document.addEventListener('keydown', startExperience, { once: true });
         }
 
         function startMusic() {
@@ -756,44 +754,6 @@
             document.getElementById('mode-text').textContent = STATE.mode;
         };
 
-        function preloadVideo() {
-            return new Promise((resolve, reject) => {
-                const xhr = new XMLHttpRequest();
-                // 确保这里的路径与你实际视频路径一致
-                xhr.open('GET', './intro.mp4', true);
-                xhr.responseType = 'blob';
-
-                const loaderText = document.querySelector('.loader-text');
-
-                xhr.onprogress = (e) => {
-                    if (e.lengthComputable) {
-                        const percent = Math.floor((e.loaded / e.total) * 100);
-                        loaderText.innerText = `Loading Christmas Magic... ${percent}%`;
-                    }
-                };
-
-                xhr.onload = () => {
-                    if (xhr.status === 200) {
-                        const videoBlob = xhr.response;
-                        const videoUrl = URL.createObjectURL(videoBlob);
-                        const video = document.getElementById('intro-video');
-                        video.src = videoUrl;
-                        loaderText.innerText = "Ready!";
-                        resolve();
-                    } else {
-                        reject('Video load failed');
-                    }
-                };
-
-                xhr.onerror = () => {
-                    loaderText.innerText = "Load Failed (Click Skip)";
-                    reject('Network error');
-                };
-
-                xhr.send();
-            });
-        }
-
         async function init() {
             initThree();
             setupLights();
@@ -801,38 +761,20 @@
             createConnectionSystem();
             createEnergyRings();
             createSnowfall();
-            // 先并行加载图片
-            autoScanImages(); 
+            await autoScanImages();
             setupPostProcessing();
             setupEvents();
             setupTouchAndClick();
-            
-            // 初始化点击事件监听，但此时不显示按钮
             setupAutoPlay();
 
-            // === 核心修改：等待视频下载 ===
-            try {
-                await preloadVideo(); // 等待视频下载到 100%
-            } catch (e) {
-                console.error("Video load error, skipping preload", e);
-            }
-
-            // 视频下载完毕，隐藏进度条
-            const loader = document.getElementById('loader');
-            gsap.to(loader, {
-                opacity: 0,
-                duration: 0.8,
-                onComplete: () => {
-                    loader.style.display = 'none';
-                    // 只有当 Loader 消失后，才允许点击进入
-                    if (!STATE.userInteracted) {
-                        autoplayOverlay.classList.add('show');
-                    }
-                }
-            });
-
             document.getElementById('particle-count').textContent = particleSystem.filter(p => p.type !== 'PHOTO').length;
-            
+
+            const loader = document.getElementById('loader');
+            setTimeout(() => {
+                loader.style.opacity = 0;
+                setTimeout(() => loader.remove(), 800);
+            }, 1500);
+
             animate();
         }
 
