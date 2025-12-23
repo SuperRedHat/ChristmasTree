@@ -6,6 +6,9 @@
     <title>Merry Christmas</title>
     <link rel="icon" href="./favicon.ico" type="image/x-icon">
     <link rel="apple-touch-icon" href="./favicon.ico">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Great+Vibes&family=Cinzel:wght@400;700&family=Rajdhani:wght@300;500;700&display=swap');
         
@@ -29,6 +32,49 @@
             z-index: 0;
         }
 
+        /* ========== 开场视频层 ========== */
+        #intro-layer {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 500;
+            background: #000;
+        }
+
+        #intro-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #skip-intro {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            color: rgba(255, 255, 255, 0.5);
+            font-family: 'Cinzel', serif;
+            font-size: 12px;
+            letter-spacing: 2px;
+            cursor: pointer;
+            padding: 10px 20px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            backdrop-filter: blur(5px);
+            z-index: 510;
+        }
+
+        #skip-intro:hover {
+            color: #ffd700;
+            border-color: #ffd700;
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+        }
+
+        /* 移除旧的 CSS 动画 flash-in/out, fade-out 
+           因为我们将使用 JS (GSAP) 来控制这些，效果更平滑
+        */
+
+        /* ========== 主场景 ========== */
         #canvas-container { 
             width: 100vw; 
             height: 100vh; 
@@ -36,7 +82,9 @@
             top: 0; left: 0; 
             z-index: 1; 
             cursor: grab;
+            opacity: 0; /* 初始隐藏，由 GSAP 控制显示 */
         }
+
         #canvas-container:active { cursor: grabbing; }
 
         #ui-layer {
@@ -45,9 +93,10 @@
             display: flex; flex-direction: column;
             align-items: center;
             padding-top: 30px;
+            opacity: 0; /* 初始隐藏，由 GSAP 控制显示 */
         }
 
-        .title-wrapper { position: relative; text-align: center; }
+        .title-wrapper { position: relative; text-align: center; perspective: 1000px; /* 开启3D透视 */ }
 
         h1 { 
             font-family: 'Great Vibes', cursive;
@@ -59,7 +108,21 @@
                 0 0 10px rgba(255, 215, 0, 0.5),
                 0 0 20px rgba(255, 180, 0, 0.3),
                 2px 2px 4px rgba(0, 0, 0, 0.8);
-            animation: warmGlow 4s ease-in-out infinite;
+            /* 暂时移除 CSS 动画，等 GSAP 入场后再由 CSS 或 JS 接管 */
+            /* animation: warmGlow 4s ease-in-out infinite; */
+        }
+        
+        /* 新增：用于文字拆分动画的类 */
+        h1 .char {
+            display: inline-block;
+            transform-style: preserve-3d;
+            backface-visibility: hidden;
+            white-space: pre; /* 保持空格 */
+        }
+
+        /* 恢复光晕动画的类，动画结束后加上 */
+        h1.glowing {
+             animation: warmGlow 4s ease-in-out infinite;
         }
 
         @keyframes warmGlow {
@@ -74,6 +137,7 @@
             letter-spacing: 6px;
             text-transform: uppercase;
             margin-top: 10px;
+            opacity: 0; /* 初始隐藏 */
         }
 
         #loader {
@@ -116,6 +180,7 @@
             align-items: flex-end;
             gap: 10px;
             z-index: 20;
+            opacity: 0; /* 初始隐藏 */
         }
 
         .control-btn {
@@ -175,6 +240,13 @@
                 bottom: 15px;
                 left: 10px;
                 font-size: 8px;
+            }
+
+            #skip-intro {
+                bottom: 20px;
+                right: 20px;
+                font-size: 10px;
+                padding: 8px 16px;
             }
         }
         
@@ -244,6 +316,7 @@
             gap: 20px;
             z-index: 20;
             pointer-events: auto;
+            opacity: 0; /* 初始隐藏 */
         }
 
         .mode-btn {
@@ -369,7 +442,6 @@
             justify-content: center;
             margin-bottom: 20px;
             animation: pulse 2s ease-in-out infinite;
-            /* Added padding-left to visually center the triangle */
             padding-left: 4px; 
         }
 
@@ -397,6 +469,12 @@
     <div class="corner corner-bl"></div>
     <div class="corner corner-br"></div>
 
+    <div id="intro-layer">
+        <video id="intro-video" playsinline webkit-playsinline preload="auto">
+            <source src="./intro.mp4" type="video/mp4">
+        </video>
+        <div id="skip-intro">Skip ▶</div>
+    </div>
     <div id="autoplay-overlay">
         <div class="play-icon"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
         <div class="play-text">Click to Enter</div>
@@ -490,7 +568,8 @@
             touch: { active: false, startX: 0, startY: 0, lastX: 0, lastY: 0 },
             time: 0,
             musicPlaying: false,
-            userInteracted: false
+            userInteracted: false,
+            introComplete: false
         };
 
         let scene, camera, renderer, composer, bloomPass;
@@ -507,35 +586,140 @@
         const musicBtn = document.getElementById('music-btn');
         const bgMusic = document.getElementById('bg-music');
         const autoplayOverlay = document.getElementById('autoplay-overlay');
+        const introLayer = document.getElementById('intro-layer');
+        const introVideo = document.getElementById('intro-video');
+        const skipBtn = document.getElementById('skip-intro');
+        const canvasContainer = document.getElementById('canvas-container');
+        const uiLayer = document.getElementById('ui-layer');
         let isCameraRunning = false;
+
+        // --- 辅助函数：将文本拆分为单个字符 ---
+        function splitTextToChars(selector) {
+            const element = document.querySelector(selector);
+            if (!element) return;
+            const text = element.innerText;
+            const chars = text.split('');
+            element.innerHTML = '';
+            chars.forEach(char => {
+                const span = document.createElement('span');
+                span.classList.add('char');
+                span.innerText = char === ' ' ? '\u00A0' : char; // 处理空格
+                element.appendChild(span);
+            });
+        }
+
+        // === 开场动画管理 (核心修改部分) ===
+        class IntroAnimationManager {
+            constructor() {
+                this.isPlaying = false;
+                this.isComplete = false;
+            }
+
+            async play() {
+                if (this.isPlaying || this.isComplete) return;
+                this.isPlaying = true;
+
+                return new Promise((resolve) => {
+                    introLayer.style.display = 'block';
+                    
+                    // 预先拆分文字，准备动画
+                    splitTextToChars('h1');
+
+                    introVideo.play().catch(e => {
+                        console.log('Video autoplay failed:', e);
+                        this.skipIntro(resolve);
+                    });
+
+                    introVideo.addEventListener('ended', () => {
+                        this.triggerTransition(resolve);
+                    });
+
+                    skipBtn.addEventListener('click', () => {
+                        this.skipIntro(resolve);
+                    });
+                });
+            }
+
+            triggerTransition(resolve) {
+                if (this.isComplete) return;
+                this.isComplete = true;
+
+                // === GSAP 高级过渡动画 ===
+                const tl = gsap.timeline({
+                    onComplete: () => {
+                        introLayer.remove();
+                        // 动画结束后，添加呼吸光晕类，让文字继续闪烁
+                        document.querySelector('h1').classList.add('glowing');
+                        STATE.introComplete = true;
+                        resolve();
+                    }
+                });
+
+                // 1. 视频层平滑淡出，同时 Canvas 和 UI 层淡入
+                tl.to(introLayer, { opacity: 0, duration: 3, ease: "power2.inOut" })
+                  .to(canvasContainer, { opacity: 1, duration: 1.5, ease: "power2.inOut" }, "<") // "<" 表示与上一个动画同时开始
+                  .to(uiLayer, { opacity: 1, duration: 1.0 }, "-=1.0"); // UI层稍微晚一点开始显示
+
+                // 2. 主标题逐字 3D 翻转入场 (Stagger 效果)
+                tl.from("h1 .char", {
+                    y: 80,             // 向下偏移
+                    opacity: 0,        // 透明
+                    rotationX: -90,    // 沿X轴旋转90度
+                    scale: 0.5,        // 缩放
+                    transformOrigin: "center bottom",
+                    duration: 1.2,
+                    ease: "back.out(1.7)", // 弹性缓动
+                    stagger: 0.04      // 每个字符间隔0.04秒
+                }, "-=0.5"); // 提前一点开始，衔接更紧密
+
+                // 3. 副标题优雅上浮
+                tl.fromTo(".subtitle", 
+                    { y: 20, opacity: 0 },
+                    { y: 0, opacity: 1, duration: 1.2, ease: "power2.out" },
+                    "-=0.8"
+                );
+
+                // 4. 按钮和模式栏错落浮现
+                tl.fromTo([".controls-wrapper", "#mode-bar"],
+                    { y: 20, opacity: 0 },
+                    { y: 0, opacity: 1, duration: 0.8, stagger: 0.2, ease: "power2.out" },
+                    "-=0.8"
+                );
+            }
+
+            skipIntro(resolve) {
+                introVideo.pause();
+                this.triggerTransition(resolve);
+            }
+        }
+
+        const introManager = new IntroAnimationManager();
 
         // === AUTO-PLAY MUSIC ===
         function setupAutoPlay() {
             setTimeout(() => {
                 if (!STATE.userInteracted) autoplayOverlay.classList.add('show');
-            }, 2000);
+            }, 500);
 
-            autoplayOverlay.addEventListener('click', () => {
+            const startExperience = async () => {
+                if (STATE.userInteracted) return;
                 STATE.userInteracted = true;
                 autoplayOverlay.classList.remove('show');
-                setTimeout(() => autoplayOverlay.remove(), 500);
-                startMusic();
-            });
 
-            const tryAutoPlay = () => {
-                if (!STATE.userInteracted) {
-                    STATE.userInteracted = true;
-                    autoplayOverlay.classList.remove('show');
-                    startMusic();
-                }
+                // 播放开场动画
+                await introManager.play();
+
+                // 开场结束后播放背景音乐
+                startMusic();
             };
 
-            document.addEventListener('click', tryAutoPlay, { once: true });
-            document.addEventListener('touchstart', tryAutoPlay, { once: true });
-            document.addEventListener('keydown', tryAutoPlay, { once: true });
+            autoplayOverlay.addEventListener('click', startExperience);
+            document.addEventListener('touchstart', startExperience, { once: true });
+            document.addEventListener('keydown', startExperience, { once: true });
         }
 
         function startMusic() {
+            bgMusic.muted = false;
             bgMusic.play().then(() => {
                 musicBtn.innerText = "♪ Stop Music";
                 musicBtn.classList.add('active');
@@ -598,7 +782,7 @@
             const container = document.getElementById('canvas-container');
             scene = new THREE.Scene();
             scene.background = new THREE.Color(CONFIG.colors.bg);
-            scene.fog = new THREE.FogExp2(CONFIG.colors.bg, 0.005); // Lighter fog for better visibility
+            scene.fog = new THREE.FogExp2(CONFIG.colors.bg, 0.005);
 
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 2, CONFIG.camera.z);
@@ -616,10 +800,6 @@
             mainGroup.add(photoMeshGroup);
         }
 
-        /* * OPTIMIZATION: Balanced Lighting
-         * - Restored Ambient light to 0.8 (was 0.4) to fix "too dark" issue.
-         * - Increased PointLights slightly for warmth.
-         */
         function setupLights() {
             scene.add(new THREE.AmbientLight(0x444455, 0.8));
 
@@ -639,16 +819,11 @@
             innerLight.position.set(0, 5, 0);
             mainGroup.add(innerLight);
 
-            // Stronger fill light so photos aren't dark
             const fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
             fillLight.position.set(0, 10, 40);
             scene.add(fillLight);
         }
 
-        /* * OPTIMIZATION: Magical Bloom
-         * - Threshold lowered to 0.5 to restore the magical glow.
-         * - Strength increased to 1.2 for a dreamy effect.
-         */
         function setupPostProcessing() {
             const renderScene = new RenderPass(scene, camera);
             
@@ -656,7 +831,6 @@
                 new THREE.Vector2(window.innerWidth, window.innerHeight),
                 1.2, 0.5, 0.5
             );
-            // Threshold 0.5 allows the tree particles and white frames to glow
             bloomPass.threshold = 0.5;
             bloomPass.strength = 0.25;
             bloomPass.radius = 0.5;
@@ -757,7 +931,6 @@
 
                 this.mesh.scale.lerp(new THREE.Vector3(s, s, s), 4 * dt);
 
-                // Update glow - Increased emissive intensity to 1.5 baseline to trigger bloom
                 if (this.type !== 'PHOTO') {
                     this.mesh.traverse(child => {
                         if (child.material && child.material.emissive) {
@@ -773,12 +946,10 @@
             function createGlowingSphere(color, size) {
                 const group = new THREE.Group();
 
-                // Bright core
                 const coreGeo = new THREE.SphereGeometry(size * 0.3, 12, 12);
                 const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
                 group.add(new THREE.Mesh(coreGeo, coreMat));
 
-                // Middle glow - High emissive to trigger Bloom
                 const midGeo = new THREE.SphereGeometry(size * 0.6, 16, 16);
                 const midMat = new THREE.MeshStandardMaterial({
                     color: color,
@@ -791,7 +962,6 @@
                 });
                 group.add(new THREE.Mesh(midGeo, midMat));
 
-                // Outer halo
                 const outerGeo = new THREE.SphereGeometry(size, 16, 16);
                 const outerMat = new THREE.MeshBasicMaterial({
                     color: color,
@@ -1087,13 +1257,6 @@
             document.getElementById('photo-count').textContent = loadedCount;
         }
 
-        /* * OPTIMIZATION: Photo Material Logic
-         * - Frame: Pure White MeshBasicMaterial (0xffffff). 
-         * With Threshold 0.5, this will emit a nice white Halo/Glow.
-         * - Photo: Light Grey MeshBasicMaterial (0xdddddd). 
-         * Slightly darkening the base color prevents the Bloom pass (Threshold 0.5) 
-         * from blowing out the details, keeping it clear while maintaining the scene's brightness.
-         */
         function updatePhotoLayout() {
             const photos = particleSystem.filter(p => p.type === 'PHOTO');
             if (photos.length === 0) return;
@@ -1114,26 +1277,21 @@
         function addPhotoToScene(texture) {
             const group = new THREE.Group();
 
-            // 边框图片的宽高比 (328x516)
             const frameAspect = 328 / 516;
-            const frameHeight = 2.2;  // 边框整体高度
+            const frameHeight = 2.2;
             const frameWidth = frameHeight * frameAspect;
 
-            // 白色区域相对于整个边框的比例（根据你的边框图估算）
-            // 左右边框约占 9%，上边框约占 5%，下边框（含玉桂狗）约占 18%
-            const innerWidthRatio = 0.82;   // 白色区域宽度占比
-            const innerHeightRatio = 0.77;  // 白色区域高度占比
-            const innerOffsetY = 0.07;      // 白色区域中心相对于边框中心的偏移（向上）
+            const innerWidthRatio = 0.82;
+            const innerHeightRatio = 0.77;
+            const innerOffsetY = 0.07;
 
             const innerWidth = frameWidth * innerWidthRatio;
             const innerHeight = frameHeight * innerHeightRatio;
 
-            // 加载边框纹理
             const frameLoader = new THREE.TextureLoader();
             const frameTexture = frameLoader.load('./cinnamoroll-frame.png');
             frameTexture.colorSpace = THREE.SRGBColorSpace;
 
-            // 边框（放在后面作为背景）
             const frameMat = new THREE.MeshBasicMaterial({ 
                 map: frameTexture,
                 side: THREE.DoubleSide
@@ -1142,42 +1300,37 @@
                 new THREE.PlaneGeometry(frameWidth, frameHeight), 
                 frameMat
             );
-            frame.position.z = -0.01;  // 边框在后
+            frame.position.z = -0.01;
             group.add(frame);
 
-            // 计算照片尺寸（适配白色区域，保持照片原始比例）
             let imgWidth = innerWidth;
             let imgHeight = innerHeight;
             if (texture.image) {
                 const imgAspect = texture.image.width / texture.image.height;
                 const innerAspect = innerWidth / innerHeight;
                 if (imgAspect > innerAspect) {
-                    // 照片更宽，以宽度为准
                     imgHeight = innerWidth / imgAspect;
                 } else {
-                    // 照片更高，以高度为准
                     imgWidth = innerHeight * imgAspect;
                 }
             }
 
-            // 照片（放在前面，位于白色区域）
             const photoMat = new THREE.MeshBasicMaterial({ 
                 map: texture, 
                 side: THREE.FrontSide
             });
             const photo = new THREE.Mesh(new THREE.PlaneGeometry(imgWidth, imgHeight), photoMat);
-            photo.position.z = 0.01;  // 照片在前
-            photo.position.y = frameHeight * innerOffsetY;  // 向上偏移到白色区域中心
+            photo.position.z = 0.01;
+            photo.position.y = frameHeight * innerOffsetY;
             group.add(photo);
 
-            // 背面（浅蓝色配合主题）
             const backMat = new THREE.MeshBasicMaterial({ color: 0xaee1f9 });
             const back = new THREE.Mesh(new THREE.PlaneGeometry(frameWidth, frameHeight), backMat);
             back.position.z = -0.02;
             back.rotation.y = Math.PI;
             group.add(back);
 
-            group.scale.setScalar(1.0);  // 可以调整整体大小
+            group.scale.setScalar(1.0);
             photoMeshGroup.add(group);
             
             particleSystem.push(new Particle(group, 'PHOTO'));
@@ -1256,7 +1409,6 @@
         async function initMediaPipe() {
             if (isCameraRunning) { stopCamera(); return; }
             
-            // 检查是否为HTTPS或localhost
             const isSecure = window.location.protocol === 'https:' || 
                             window.location.hostname === 'localhost' || 
                             window.location.hostname === '127.0.0.1';
@@ -1280,7 +1432,6 @@
                 video.srcObject = stream;
                 video.addEventListener("loadeddata", predictWebcam);
 
-                // document.getElementById('webcam-wrapper').style.opacity = 1;
                 camBtn.innerText = "◈ Disable Gesture";
                 camBtn.classList.add('active');
                 isCameraRunning = true;
@@ -1376,7 +1527,6 @@
             const dt = clock.getDelta();
             STATE.time += dt;
 
-            // Star animation
             mainGroup.traverse(child => {
                 if (child.userData?.isStar) {
                     child.rotation.y += 0.5 * dt;
@@ -1384,7 +1534,6 @@
                 }
             });
 
-            // Rotation
             if (STATE.hand.detected) {
                 if (STATE.mode === 'SCATTER') {
                     STATE.rotation.y += ((STATE.hand.x * Math.PI * 0.9) - STATE.rotation.y) * 3.0 * dt;
