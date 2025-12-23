@@ -739,25 +739,40 @@
                 STATE.userInteracted = true;
                 autoplayOverlay.classList.remove('show');
 
+                // 关键：在用户点击时立即启动音乐（静音）
+                bgMusic.muted = true;
+                bgMusic.play().catch(e => console.log("Music pre-play failed:", e));
+
                 // 播放开场动画
                 await introManager.play();
 
-                // 开场结束后播放背景音乐
+                // 开场结束后取消静音
                 startMusic();
             };
 
             autoplayOverlay.addEventListener('click', startExperience);
-            document.addEventListener('touchstart', startExperience, { once: true });
-            document.addEventListener('keydown', startExperience, { once: true });
+            autoplayOverlay.addEventListener('touchend', startExperience);
+            autoplayOverlay.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') startExperience();
+            });
+            autoplayOverlay.setAttribute('tabindex', '0'); // 让 overlay 可以获得焦点
         }
 
         function startMusic() {
-            bgMusic.muted = false;
-            bgMusic.play().then(() => {
-                musicBtn.innerText = "♪ Stop Music";
-                musicBtn.classList.add('active');
-                STATE.musicPlaying = true;
-            }).catch(e => console.log("Music autoplay blocked:", e));
+            // 重置到开头
+            bgMusic.currentTime = 0;
+            
+            // 如果已经在播放，只需取消静音
+            if (!bgMusic.paused) {
+                bgMusic.muted = false;
+            } else {
+                bgMusic.muted = false;
+                bgMusic.play().catch(e => console.log("Music autoplay blocked:", e));
+            }
+            
+            musicBtn.innerText = "♪ Stop Music";
+            musicBtn.classList.add('active');
+            STATE.musicPlaying = true;
         }
 
         musicBtn.addEventListener('click', () => {
