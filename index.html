@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -706,56 +706,25 @@
                 STATE.userInteracted = true;
                 autoplayOverlay.classList.remove('show');
 
-                // === 修正方案：最原始的解锁方式 ===
-                // 1. 设置正常音量 (防止部分手机因为音量0而自动挂起音频)
-                bgMusic.volume = 0.5; 
-                bgMusic.muted = false;
-
-                // 2. 强行播放，并在成功后立刻暂停
-                // 这是一个同步动作，浏览器能识别
-                try {
-                    await bgMusic.play();
-                    bgMusic.pause();       // 拿到权限后立刻暂停
-                    bgMusic.currentTime = 0; // 倒带回开头
-                } catch (e) {
-                    console.log("Audio unlock failed, waiting for manual interaction", e);
-                }
-
-                // 3. 播放开场视频
+                // 播放开场动画
                 await introManager.play();
 
-                // 4. 视频结束后播放音乐
+                // 开场结束后播放背景音乐
                 startMusic();
             };
 
-            // 只监听 click，它是最稳的
             autoplayOverlay.addEventListener('click', startExperience);
+            document.addEventListener('touchstart', startExperience, { once: true });
+            document.addEventListener('keydown', startExperience, { once: true });
         }
 
         function startMusic() {
-            // 确保静音关闭
             bgMusic.muted = false;
-            bgMusic.volume = 0.5;
-            bgMusic.currentTime = 0; // 确保从头开始
-            
-            // 直接播放，不要加任何花哨的特效
-            const playPromise = bgMusic.play();
-            
-            if (playPromise !== undefined) {
-                playPromise.then(() => {
-                    // 播放成功
-                    musicBtn.innerText = "♪ Stop Music";
-                    musicBtn.classList.add('active');
-                    STATE.musicPlaying = true;
-                }).catch(error => {
-                    console.error("Playback failed:", error);
-                    // 如果自动播放还是失败，重置按钮状态，提示用户手动点击
-                    musicBtn.innerText = "♪ Play Music";
-                    musicBtn.classList.remove('active');
-                    STATE.musicPlaying = false;
-                    showMsg("Tap Music Button to Start Audio");
-                });
-            }
+            bgMusic.play().then(() => {
+                musicBtn.innerText = "♪ Stop Music";
+                musicBtn.classList.add('active');
+                STATE.musicPlaying = true;
+            }).catch(e => console.log("Music autoplay blocked:", e));
         }
 
         musicBtn.addEventListener('click', () => {
