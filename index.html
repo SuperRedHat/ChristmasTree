@@ -684,7 +684,25 @@
         function setupAutoPlay() {
             const loader = document.getElementById('loader');
             const loaderText = loader.querySelector('.loader-text');
+            let videoReady = false;
             
+            const onVideoReady = () => {
+                if (videoReady) return; // 防止重复触发
+                videoReady = true;
+                
+                loaderText.textContent = 'Ready!';
+                
+                setTimeout(() => {
+                    loader.style.opacity = 0;
+                    setTimeout(() => {
+                        loader.style.display = 'none';
+                        if (!STATE.userInteracted) {
+                            autoplayOverlay.classList.add('show');
+                        }
+                    }, 800);
+                }, 300);
+            };
+
             // 监听视频加载进度
             introVideo.addEventListener('progress', () => {
                 if (introVideo.buffered.length > 0) {
@@ -697,41 +715,28 @@
                 }
             });
 
-            // 视频可以流畅播放时
-            const onVideoReady = () => {
-                loaderText.textContent = 'Ready!';
-                
-                // 淡出 loader，显示开始按钮
-                setTimeout(() => {
-                    loader.style.opacity = 0;
-                    setTimeout(() => {
-                        loader.style.display = 'none';
-                        if (!STATE.userInteracted) {
-                            autoplayOverlay.classList.add('show');
-                        }
-                    }, 800);
-                }, 300);
-            };
-
-            // 监听视频准备就绪
+            // 多种就绪条件，任一触发即可
             if (introVideo.readyState >= 3) {
-                // 视频已经加载好了
                 onVideoReady();
             } else {
                 introVideo.addEventListener('canplaythrough', onVideoReady, { once: true });
+                introVideo.addEventListener('loadeddata', onVideoReady, { once: true }); // 更宽松的条件
             }
 
-            // 如果视频加载失败，也要允许继续
+            // 关键：添加超时机制，移动端可能不预加载视频
+            setTimeout(() => {
+                if (!videoReady) {
+                    console.log('Video load timeout, proceeding anyway');
+                    loaderText.textContent = 'Ready!';
+                    onVideoReady();
+                }
+            }, 3000); // 3秒超时
+
+            // 视频加载失败处理
             introVideo.addEventListener('error', () => {
                 console.log('Video load error, skipping intro');
                 loaderText.textContent = 'Video unavailable, continuing...';
-                setTimeout(() => {
-                    loader.style.opacity = 0;
-                    setTimeout(() => {
-                        loader.style.display = 'none';
-                        autoplayOverlay.classList.add('show');
-                    }, 800);
-                }, 1000);
+                setTimeout(onVideoReady, 500);
             });
 
             const startExperience = async () => {
@@ -739,7 +744,7 @@
                 STATE.userInteracted = true;
                 autoplayOverlay.classList.remove('show');
 
-                // 关键：在用户点击时立即启动音乐（静音）
+                // 在用户点击时立即启动音乐（静音）
                 bgMusic.muted = true;
                 bgMusic.play().catch(e => console.log("Music pre-play failed:", e));
 
